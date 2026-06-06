@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Clase Asincrónica: Control de Acceso</title>
+    
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.3.1/reset.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.3.1/reveal.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.3.1/theme/night.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.3.1/plugin/highlight/monokai.min.css">
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
+        
+        .reveal h1, .reveal h2, .reveal h3 {
+            text-transform: none; 
+            font-family: 'Inter', sans-serif;
+            font-weight: 800;
+            color: #3b82f6; 
+        }
+        .reveal h1 { font-size: 2.2em; }
+        .reveal p, .reveal li {
+            font-size: 0.9em;
+            line-height: 1.4;
+        }
+        .reveal pre {
+            box-shadow: 0 10px 30px rgba(0,0,0,0.8);
+            border-radius: 8px;
+            font-size: 0.6em;
+            width: 95%;
+        }
+        .highlight-text {
+            color: #10b981; 
+            font-weight: bold;
+        }
+        .warning-text {
+            color: #ef4444; 
+            font-size: 0.8em;
+            margin-top: 30px !important;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="reveal">
+        <div class="slides">
+
+            <section>
+                <h1>Sistemas de Control de Acceso</h1>
+                <h3>Arquitectura de hardware y software de bajo costo</h3>
+                <p style="margin-top: 40px; color: #94a3b8;">
+                    Modo Kiosco • Google Sheets API • Lector QR • GitHub
+                </p>
+            </section>
+
+            <section>
+                <h2>El Problema y la Meta</h2>
+                <p>Entregar una PC a un operador para controlar ingresos físicos implica severos riesgos de seguridad y posibles distracciones en el trabajo.</p>
+                <p class="fragment"><strong class="highlight-text">Objetivo de la clase:</strong> Construir una terminal dedicada que solo corra una aplicación, que no use bases de datos costosas y que esté alojada gratis en internet.</p>
+            </section>
+
+            <section>
+                <section>
+                    <h2>Módulo 1: SO Físico</h2>
+                    <p>Para atrapar al usuario, empleamos el <span class="highlight-text">Modo Kiosco (Kiosk Mode)</span>.</p>
+                    <p>Esta función nativa convierte una PC estándar en una terminal de propósito único, bloqueando por completo la interfaz gráfica del Sistema Operativo.</p>
+                    <p style="font-size: 0.6em; color: gray;">(Presiona la flecha ABAJO para ver los pasos de Windows)</p>
+                </section>
+                <section>
+                    <h2>Pasos en Windows 10/11</h2>
+                    <ol>
+                        <li>Abre la consola CMD como Administrador.</li>
+                        <li>Crea rápidamente un usuario local restringido: <br><code style="color: yellow;">net user Operador Contraseña /add</code></li>
+                        <li>Ve a <strong>Configuración > Cuentas > Familia y otros usuarios > Configurar un quiosco</strong>.</li>
+                        <li>Elige al usuario "Operador" y asigna el navegador Edge en modo "Señalización digital interactiva" con la URL de tu app.</li>
+                    </ol>
+                    <p class="fragment warning-text">Resultado: El usuario queda atrapado en pantalla completa sin barra de tareas y no puede minimizar nada.</p>
+                </section>
+            </section>
+
+            <section>
+                <section>
+                    <h2>Módulo 2: Base de Datos Serverless</h2>
+                    <p>Usaremos <strong>Google Apps Script</strong> para convertir una simple planilla de Google Drive en nuestra Base de Datos (gratuita, segura y en la nube).</p>
+                    <p style="font-size: 0.6em; color: gray;">(Presiona flecha ABAJO para ver el código)</p>
+                </section>
+                <section>
+                    <h2>Webhook con Apps Script</h2>
+                    <p>Este código <code>.gs</code> intercepta los datos que llegan de la cámara.</p>
+                    <pre><code data-trim data-noescape class="javascript">
+function doPost(e) {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  try {
+    var qrContent = e.parameter.codigo;
+
+    if (sheet.getLastRow() === 0) {
+      sheet.appendRow(["Fecha y Hora", "Contenido del QR"]);
+    }
+
+    sheet.appendRow([new Date(), qrContent]);
+    
+    return ContentService.createTextOutput("Éxito");
+  } catch (error) {
+    return ContentService.createTextOutput("Error");
+  }
+}
+                    </code></pre>
+                    <button onclick="downloadFile(rawCodigoGs, 'codigo.gs')" style="margin-top:20px; padding:12px 24px; background:#10b981; color:#fff; border:none; border-radius:6px; cursor:pointer; font-weight:bold; font-family:'Inter', sans-serif; font-size:0.7em;">Descargar codigo.gs</button>
+                </section>
+            </section>
+
+            <section>
+                <section>
+                    <h2>Módulo 3: Aplicación Frontend</h2>
+                    <p>La interfaz del operador es una SPA (Single Page App) en HTML5/JS que usa la librería <code>html5-qrcode</code> para acceder a la cámara web y escanear entradas físicas.</p>
+                </section>
+                <section>
+                    <h2>La Mecánica de Envío</h2>
+                    <p>Este código debe ir dentro del archivo <strong class="highlight-text">index.html</strong>, abajo de todo, encerrado en etiquetas <code>&lt;script&gt;</code>.</p>
+                    <p>Al escanear un QR, esta función manda los datos a Google Sheets usando <code>fetch()</code>.</p>
+                    <pre><code data-trim data-noescape class="javascript">
+function onScanSuccess(decodedText) {
+    const formData = new URLSearchParams();
+    formData.append('codigo', decodedText);
+
+    fetch("TU_URL_DE_APPS_SCRIPT", {
+        method: 'POST',
+        mode: 'no-cors', // Fundamental: Evita el bloqueo de origen cruzado
+        body: formData,
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+    }).then(() => {
+        alert("¡Registro guardado con éxito!");
+    });
+}
+                    </code></pre>
+                    <button onclick="downloadFile(rawIndexHtml, 'index.html')" style="margin-top:20px; padding:12px 24px; background:#3b82f6; color:#fff; border:none; border-radius:6px; cursor:pointer; font-weight:bold; font-family:'Inter', sans-serif; font-size:0.7em;">Descargar index.html (Completo)</button>
+                </section>
+            </section>
+
+            <section>
+                <h2>Módulo 4: Hosting con GitHub Pages</h2>
+                <p>Nuestra interfaz HTML necesita residir en internet para funcionar. GitHub ofrece alojamiento estático de alta disponibilidad 100% gratuito.</p>
+                <ol>
+                    <li class="fragment">Sube tu código (<code>index.html</code>) a un repositorio público.</li>
+                    <li class="fragment">En tu repositorio, ve a la pestaña <strong>Settings > Pages</strong>.</li>
+                    <li class="fragment">En "Source", selecciona la rama <code>main</code> y dale a Guardar.</li>
+                </ol>
+                <p class="fragment" style="margin-top: 30px;"><span class="highlight-text">En 2 minutos, la web estará pública a nivel mundial.</span></p>
+            </section>
+
+            <section>
+                <section>
+                    <h2>Módulo 5: Git y Trabajo Colaborativo</h2>
+                    <p>Para manipular todo esto como un desarrollador profesional, requerimos el motor de control de versiones Git en nuestra máquina.</p>
+                </section>
+                <section>
+                    <h2>Instalación de Git</h2>
+                    <p><strong>En Linux (Ubuntu/Debian):</strong></p>
+                    <pre><code data-trim class="bash">sudo apt update && sudo apt install git -y</code></pre>
+                    <p><strong>En Windows (CMD / PowerShell):</strong></p>
+                    <pre><code data-trim class="bash">winget install --id Git.Git -e --source winget</code></pre>
+                </section>
+                <section>
+                    <h2>Clonar el repositorio</h2>
+                    <p>Para descargar exactamente este proyecto a tu PC:</p>
+                    <pre><code data-trim class="bash">
+git clone https://github.com/fiemcasals/scanner.git
+                    </code></pre>
+                    <p style="font-size: 0.8em;">Esto creará una carpeta idéntica con el código fuente y las guías.</p>
+                </section>
+                <section>
+                    <h2>Pushear (Subir tus cambios)</h2>
+                    <p>Si alteraste el código localmente, este es el flujo para publicarlo:</p>
+                    <pre><code data-trim class="bash">
+git add .
+git commit -m "Explicación del cambio (ej: Agrego color rojo)"
+git push origin main
+                    </code></pre>
+                    <p class="fragment warning-text">
+                        Aviso de Seguridad: GitHub deprecó las contraseñas clásicas. 
+                        Al hacer "push", en el campo de contraseña debes pegar tu Personal Access Token (PAT).
+                    </p>
+                </section>
+                <section>
+                    <h2>Crear Token (PAT)</h2>
+                    <p>Las contraseñas de tu cuenta ya no sirven en Git por seguridad. Debes usar un <strong>Personal Access Token</strong>:</p>
+                    <ol>
+                        <li>Ve a GitHub: <strong style="color:white;">Settings > Developer Settings</strong>.</li>
+                        <li>Entra a <strong style="color:white;">Personal access tokens > Tokens (classic)</strong>.</li>
+                        <li>Haz clic en <strong style="color:white;">Generate new token (classic)</strong>.</li>
+                        <li>Marca la casilla <strong style="color:white;">`repo`</strong> (para dar permisos de escritura y lectura).</li>
+                        <li>Haz clic en Generate y <strong class="highlight-text">copia el código que empieza con ghp_</strong>.</li>
+                    </ol>
+                    <p class="fragment warning-text" style="margin-top: 15px;">Al hacer `git push`, pega ese código cuando la consola te pida tu "Password".</p>
+                </section>
+            </section>
+
+            <section>
+                <h2>¡Fin de la Clase!</h2>
+                <p>Ya cuentas con todas las herramientas para construir e implementar sistemas de hardware restringido y bases de datos serverless costo $0.</p>
+            </section>
+
+        </div>
+    </div>
+
+    <!-- Script de Descarga Segura -->
+    <script>
+        // Data inyectada de manera segura desde Python
+        const rawIndexHtml = "<!DOCTYPE html>\n<html lang=\"es\">\n\n<head>\n    <meta charset=\"UTF-8\">\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n    <title>Lector de C\u00f3digo QR a Sheets</title>\n    <!-- Librer\u00eda gratuita y Open Source para escanear QR -->\n    <script src=\"https://unpkg.com/html5-qrcode\" type=\"text/javascript\"><\/script>\n    <style>\n        body {\n            font-family: 'Inter', 'Segoe UI', sans-serif;\n            background-color: #121212;\n            color: #ffffff;\n            display: flex;\n            flex-direction: column;\n            align-items: center;\n            padding: 20px;\n            margin: 0;\n            min-height: 100vh;\n        }\n\n        h1 {\n            text-align: center;\n            margin-bottom: 20px;\n            font-size: 1.8rem;\n            color: #4CAF50;\n        }\n\n        #reader {\n            width: 100%;\n            max-width: 500px;\n            border-radius: 12px;\n            overflow: hidden;\n            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);\n            background: #1e1e1e;\n            border: 2px solid #333;\n        }\n\n        #result-container {\n            margin-top: 25px;\n            padding: 20px;\n            background-color: #1e1e1e;\n            border-radius: 12px;\n            width: 100%;\n            max-width: 460px;\n            text-align: center;\n            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);\n            border: 1px solid #333;\n        }\n\n        #qr-result {\n            font-size: 1.3em;\n            word-break: break-all;\n            color: #4CAF50;\n            margin: 15px 0;\n            font-weight: bold;\n            background: #2a2a2a;\n            padding: 10px;\n            border-radius: 6px;\n        }\n\n        .status {\n            font-size: 1em;\n            color: #aaaaaa;\n            margin-top: 10px;\n        }\n\n        .success-msg {\n            color: #4CAF50;\n            font-weight: bold;\n        }\n\n        .error-msg {\n            color: #f44336;\n            font-weight: bold;\n        }\n\n        .warning-msg {\n            color: #ffeb3b;\n        }\n\n        /* Ajustar botones internos generados por la librer\u00eda */\n        #reader button {\n            background-color: #4CAF50;\n            color: white;\n            border: none;\n            padding: 10px 15px;\n            border-radius: 5px;\n            cursor: pointer;\n            margin-top: 10px;\n        }\n    </style>\n</head>\n\n<body>\n\n    <h1>Escanear Ingreso</h1>\n\n    <!-- Contenedor donde se montar\u00e1 la c\u00e1mara -->\n    <div id=\"reader\"></div>\n\n    <div id=\"result-container\">\n        <div>\u00daltimo c\u00f3digo detectado:</div>\n        <div id=\"qr-result\">- Ninguno -</div>\n        <div id=\"sync-status\" class=\"status\">Esperando escanear...</div>\n    </div>\n\n    <script>\n        // ==========================================\n        // 1. REEMPLAZA ESTA URL CON LA QUE TE D\u00c9 APPS SCRIPT\n        // ==========================================\n        const APPS_SCRIPT_URL = \"https://script.google.com/macros/s/AKfycbyHyX_ElBPRICXPU2yKn_aTsHnGO1LheMQBf3ID2fXSFhID-yHMdqrAG7BVmTOohKIH8A/exec\";\n\n        let isProcessing = false;\n\n        // Funci\u00f3n que se ejecuta cuando se detecta un QR exitosamente\n        function onScanSuccess(decodedText, decodedResult) {\n            // Evitar env\u00edos duplicados mientras procesamos uno\n            if (isProcessing) return;\n\n            isProcessing = true;\n            document.getElementById('qr-result').innerText = decodedText;\n\n            const statusDiv = document.getElementById('sync-status');\n            statusDiv.innerText = \"\u23f3 Enviando a Google Sheets...\";\n            statusDiv.className = \"status warning-msg\";\n\n            // Preparamos los datos\n            const formData = new URLSearchParams();\n            formData.append('codigo', decodedText);\n\n            // Enviamos al Apps Script\n            fetch(APPS_SCRIPT_URL, {\n                method: 'POST',\n                mode: 'no-cors', // Crucial para evitar errores CORS en GitHub Pages\n                body: formData,\n                headers: {\n                    'Content-Type': 'application/x-www-form-urlencoded'\n                }\n            })\n                .then(response => {\n                    // Con mode 'no-cors' no podemos leer la respuesta real, \n                    // pero si entra aqu\u00ed, la petici\u00f3n sali\u00f3 bien.\n                    statusDiv.innerText = \"\u2705 \u00a1Guardado con \u00e9xito!\";\n                    statusDiv.className = \"status success-msg\";\n\n                    // Esperar 2.5 segundos antes de permitir escanear otro QR\n                    setTimeout(() => {\n                        isProcessing = false;\n                        statusDiv.innerText = \"Esperando siguiente c\u00f3digo...\";\n                        statusDiv.className = \"status\";\n                    }, 2500);\n                })\n                .catch(error => {\n                    console.error('Error al enviar:', error);\n                    statusDiv.innerText = \"\u274c Error al guardar. Intenta de nuevo.\";\n                    statusDiv.className = \"status error-msg\";\n\n                    setTimeout(() => {\n                        isProcessing = false;\n                    }, 3000);\n                });\n        }\n\n        function onScanFailure(error) {\n            // Se ejecuta cont\u00ednuamente mientras no vea un QR claro. No hacemos nada.\n        }\n\n        // Inicializamos el lector QR al cargar la p\u00e1gina\n        const html5QrcodeScanner = new Html5QrcodeScanner(\n            \"reader\",\n            {\n                fps: 10,\n                qrbox: { width: 250, height: 250 },\n                rememberLastUsedCamera: true\n            },\n            /* verbose= */ false\n        );\n        html5QrcodeScanner.render(onScanSuccess, onScanFailure);\n    <\/script>\n</body>\n\n</html>";
+        const rawCodigoGs = "function doPost(e) {\n  // Obtenemos la hoja activa (aseg\u00farate de estar en la hoja correcta)\n  var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();\n  \n  try {\n    // Extraemos el valor \"codigo\" enviado por nuestro HTML (v\u00eda form-urlencoded)\n    var qrContent = e.parameter.codigo;\n    \n    // Si la hoja est\u00e1 completamente vac\u00eda, agregamos cabeceras\n    if (sheet.getLastRow() === 0) {\n      sheet.appendRow([\"Fecha y Hora\", \"Contenido del QR\"]);\n      \n      // Opcional: poner las cabeceras en negrita\n      sheet.getRange(\"A1:B1\").setFontWeight(\"bold\");\n    }\n    \n    // Insertamos la nueva fila con la fecha actual y el c\u00f3digo escaneado\n    sheet.appendRow([new Date(), qrContent]);\n    \n    // Devolvemos un mensaje de \u00e9xito\n    return ContentService.createTextOutput(\"Registro exitoso\").setMimeType(ContentService.MimeType.TEXT);\n      \n  } catch (error) {\n    // Si hay error, lo devolvemos\n    return ContentService.createTextOutput(\"Error: \" + error.toString()).setMimeType(ContentService.MimeType.TEXT);\n  }\n}\n\n// Opcional: manejador GET por si abres la URL del script directamente en el navegador\nfunction doGet(e) {\n  return ContentService.createTextOutput(\"La API est\u00e1 funcionando correctamente. Esperando solicitudes POST.\");\n}\n";
+
+        function downloadFile(content, filename) {
+            const blob = new Blob([content], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+    </script>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.3.1/reveal.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.3.1/plugin/highlight/highlight.min.js"></script>
+    <script>
+        Reveal.initialize({
+            hash: true,           
+            slideNumber: 'c/t',   
+            transition: 'slide',  
+            controls: true,       
+            progress: true,       
+            plugins: [ RevealHighlight ] 
+        });
+    </script>
+</body>
+</html>
