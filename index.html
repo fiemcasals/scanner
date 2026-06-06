@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lector de Código QR a Sheets</title>
+    <!-- Librería gratuita y Open Source para escanear QR -->
+    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+    <style>
+        body {
+            font-family: 'Inter', 'Segoe UI', sans-serif;
+            background-color: #121212;
+            color: #ffffff;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            margin: 0;
+            min-height: 100vh;
+        }
+
+        h1 {
+            text-align: center;
+            margin-bottom: 20px;
+            font-size: 1.8rem;
+            color: #4CAF50;
+        }
+
+        #reader {
+            width: 100%;
+            max-width: 500px;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+            background: #1e1e1e;
+            border: 2px solid #333;
+        }
+
+        #result-container {
+            margin-top: 25px;
+            padding: 20px;
+            background-color: #1e1e1e;
+            border-radius: 12px;
+            width: 100%;
+            max-width: 460px;
+            text-align: center;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+            border: 1px solid #333;
+        }
+
+        #qr-result {
+            font-size: 1.3em;
+            word-break: break-all;
+            color: #4CAF50;
+            margin: 15px 0;
+            font-weight: bold;
+            background: #2a2a2a;
+            padding: 10px;
+            border-radius: 6px;
+        }
+
+        .status {
+            font-size: 1em;
+            color: #aaaaaa;
+            margin-top: 10px;
+        }
+
+        .success-msg {
+            color: #4CAF50;
+            font-weight: bold;
+        }
+
+        .error-msg {
+            color: #f44336;
+            font-weight: bold;
+        }
+
+        .warning-msg {
+            color: #ffeb3b;
+        }
+
+        /* Ajustar botones internos generados por la librería */
+        #reader button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+
+<body>
+
+    <h1>Escanear Ingreso</h1>
+
+    <!-- Contenedor donde se montará la cámara -->
+    <div id="reader"></div>
+
+    <div id="result-container">
+        <div>Último código detectado:</div>
+        <div id="qr-result">- Ninguno -</div>
+        <div id="sync-status" class="status">Esperando escanear...</div>
+    </div>
+
+    <script>
+        // ==========================================
+        // 1. REEMPLAZA ESTA URL CON LA QUE TE DÉ APPS SCRIPT
+        // ==========================================
+        const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyHyX_ElBPRICXPU2yKn_aTsHnGO1LheMQBf3ID2fXSFhID-yHMdqrAG7BVmTOohKIH8A/exec";
+
+        let isProcessing = false;
+
+        // Función que se ejecuta cuando se detecta un QR exitosamente
+        function onScanSuccess(decodedText, decodedResult) {
+            // Evitar envíos duplicados mientras procesamos uno
+            if (isProcessing) return;
+
+            isProcessing = true;
+            document.getElementById('qr-result').innerText = decodedText;
+
+            const statusDiv = document.getElementById('sync-status');
+            statusDiv.innerText = "⏳ Enviando a Google Sheets...";
+            statusDiv.className = "status warning-msg";
+
+            // Preparamos los datos
+            const formData = new URLSearchParams();
+            formData.append('codigo', decodedText);
+
+            // Enviamos al Apps Script
+            fetch(APPS_SCRIPT_URL, {
+                method: 'POST',
+                mode: 'no-cors', // Crucial para evitar errores CORS en GitHub Pages
+                body: formData,
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded'
+                }
+            })
+                .then(response => {
+                    // Con mode 'no-cors' no podemos leer la respuesta real, 
+                    // pero si entra aquí, la petición salió bien.
+                    statusDiv.innerText = "✅ ¡Guardado con éxito!";
+                    statusDiv.className = "status success-msg";
+
+                    // Esperar 2.5 segundos antes de permitir escanear otro QR
+                    setTimeout(() => {
+                        isProcessing = false;
+                        statusDiv.innerText = "Esperando siguiente código...";
+                        statusDiv.className = "status";
+                    }, 2500);
+                })
+                .catch(error => {
+                    console.error('Error al enviar:', error);
+                    statusDiv.innerText = "❌ Error al guardar. Intenta de nuevo.";
+                    statusDiv.className = "status error-msg";
+
+                    setTimeout(() => {
+                        isProcessing = false;
+                    }, 3000);
+                });
+        }
+
+        function onScanFailure(error) {
+            // Se ejecuta contínuamente mientras no vea un QR claro. No hacemos nada.
+        }
+
+        // Inicializamos el lector QR al cargar la página
+        const html5QrcodeScanner = new Html5QrcodeScanner(
+            "reader",
+            {
+                fps: 10,
+                qrbox: { width: 250, height: 250 },
+                rememberLastUsedCamera: true
+            },
+            /* verbose= */ false
+        );
+        html5QrcodeScanner.render(onScanSuccess, onScanFailure);
+    </script>
+</body>
+
+</html>
